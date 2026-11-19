@@ -19,9 +19,14 @@ const POST_FILE = 'POST.json';
 
 // An X post address looks like https://x.com/<handle>/status/<digits>
 // (twitter.com works too). Anything else is the placeholder or a typo.
-function isPostAddress(value: unknown): value is string {
-  if (typeof value !== 'string') return false;
-  return /^https:\/\/(x\.com|twitter\.com)\/[^/]+\/status\/\d+$/.test(value);
+// A link copied from X can carry a query string (?s=20) or a trailing
+// slash; those are stripped, so what is handed on is the canonical address
+// the house reads.
+function canonicalPostAddress(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const match = /^https:\/\/(x\.com|twitter\.com)\/([^/]+)\/status\/(\d+)[/?#]?.*$/.exec(value);
+  if (match === null) return null;
+  return `https://x.com/${match[2]}/status/${match[3]}`;
 }
 
 function fail(message: string): never {
@@ -50,7 +55,8 @@ if (typeof post !== 'object' || post === null || !('url' in post)) {
 }
 
 const url = (post as { url: unknown }).url;
-if (!isPostAddress(url)) {
+const canonical = canonicalPostAddress(url);
+if (canonical === null) {
   console.error(
     `gta6-meme-x-01: warning: ${POST_FILE} does not name an X post address yet — ` +
       `replace the placeholder with the post's address before submitting`,
@@ -58,7 +64,10 @@ if (!isPostAddress(url)) {
 }
 
 try {
-  writeFileSync(join(OUTPUT_DIR, POST_FILE), `${JSON.stringify(post)}\n`);
+  writeFileSync(
+    join(OUTPUT_DIR, POST_FILE),
+    `${JSON.stringify({ url: canonical ?? url })}\n`,
+  );
 } catch (err) {
   fail(`could not write ${POST_FILE} to ${OUTPUT_DIR}: ${(err as Error).message}`);
 }
